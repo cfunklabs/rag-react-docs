@@ -36,7 +36,7 @@ def _build_ssl_context() -> ssl.SSLContext:
 SSL_CONTEXT = _build_ssl_context()
 
 INDEX_URL = "https://react.dev/llms.txt"
-# scripts/ lives in packages/rag_py/, but docs/ stays in the monorepo root (three levels up).
+# This script lives in backend/src/utils/, but docs/ stays in the repo root (three levels up).
 OUTPUT_DIR = Path(__file__).resolve().parents[3] / "docs"
 USER_AGENT = "react-docs-fetcher/1.0 (+https://react.dev)"
 

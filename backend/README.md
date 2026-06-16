@@ -1,6 +1,6 @@
-# rag_py
+# rag-backend
 
-Python tooling for the RAG demo, built with LangChain, LangGraph, and Anthropic Claude.
+Backend for the RAG demo, built with LangChain, LangGraph, Anthropic Claude, and ChromaDB.
 
 ## Prerequisites
 
@@ -10,7 +10,7 @@ Python tooling for the RAG demo, built with LangChain, LangGraph, and Anthropic 
 
 ## Setup
 
-All commands should be run from the `packages/rag_py` directory.
+All commands should be run from the `backend` directory.
 
 ### 1. Install dependencies
 
@@ -32,7 +32,19 @@ Open `.env` and set your key:
 ANTHROPIC_API_KEY=your_api_key_here
 ```
 
-### 3. Fetch the React docs dataset
+### 3. Initialize the vector database
+
+Create the ChromaDB collection used to store document embeddings:
+
+```bash
+uv run src/utils/init_db.py
+```
+
+This creates a persistent ChromaDB store under `rag_datastore/` and a collection
+named after `tool.rag_db.rag_doc_collection_name` in [pyproject.toml](pyproject.toml).
+The `rag_datastore/` directory is gitignored.
+
+### 4. Fetch the React docs dataset
 
 The corpus is a local mirror of the [React documentation](https://react.dev/) markdown files. Download it with:
 

@@ -1,13 +1,17 @@
 [project]
-name = "rag-demo"
+name = "rag-backend"
 version = "0.1.0"
-description = "Add your description here"
+description = "Backend for the LangChain RAG demo"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "chromadb>=1.5.9",
     "langchain>=1.3.9",
     "langchain-anthropic>=1.4.6",
     "langchain-core>=1.4.7",
     "langgraph>=1.2.5",
     "python-dotenv>=1.0.0",
 ]
+
+[tool.rag_db]
+rag_doc_collection_name = "rag_doc_collection"
