@@ -1,2 +1,5 @@
+docs/
 .env
-.cursor
+.venv/
+__pycache__/
+*.pyc
