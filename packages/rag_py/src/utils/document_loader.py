@@ -2,7 +2,9 @@ from pathlib import Path
 from langchain_core.documents import Document
 from dotenv import load_dotenv
 
+
 load_dotenv()
+
 
 def load_document_at_path(file_path: str):
   try:
@@ -23,3 +25,6 @@ def load_document_at_path(file_path: str):
 
   return document
 
+
+if __name__ == "__main__":
+    raise RuntimeError("This module is not intended to be run directly. Please import it as a module.")

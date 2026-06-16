@@ -2,6 +2,7 @@ import chromadb
 import tomllib
 from pathlib import Path
 
+
 def init_db():
   chroma_client = chromadb.PersistentClient(path="./rag_datastore")
 
@@ -14,8 +15,15 @@ def init_db():
   print("DB initialized")
   return collection
 
-def main():
-  init_db()
+
+def main() -> int:
+  try:
+    init_db()
+  except Exception as e:
+    print(f"Error initializing DB: {e}")
+    return 1
+  return 0
+
 
 if __name__ == "__main__":
-  main()
+    raise SystemExit(main())
