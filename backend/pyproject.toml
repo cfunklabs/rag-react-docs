@@ -15,3 +15,9 @@ dependencies = [
 
 [tool.rag_db]
 rag_doc_collection_name = "rag_doc_collection"
+
+[tool.console.colors]
+GREEN = "\u001B[92m"
+RED = "\u001B[91m"
+YELLOW = "\u001B[93m"
+RESET = "\u001B[0m"
