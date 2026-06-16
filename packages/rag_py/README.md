@@ -37,7 +37,7 @@ ANTHROPIC_API_KEY=your_api_key_here
 The corpus is a local mirror of the [React documentation](https://react.dev/) markdown files. Download it with:
 
 ```bash
-uv run scripts/fetch_react_docs.py
+uv run src/utils/fetch_react_docs.py
 ```
 
 This script:
