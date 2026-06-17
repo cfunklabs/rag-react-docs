@@ -1,6 +1,8 @@
 import argparse
+import hashlib
 from pathlib import Path
 import chromadb
+from chromadb.utils import embedding_functions
 from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langchain_core.documents import Document
@@ -96,16 +98,25 @@ def get_md_doc_chunks(md_file_path: Path) -> list[Document]:
     return chunk_document(document)
 
 
+def get_rag_collection():
+    client = chromadb.PersistentClient(path=str(DATASTORE_DIR))
+    return client.get_collection(name=RAG_COLLECTION_NAME)
+
+
 def process_documents(md_file_paths: list[Path], **kwargs):
     evaluate_chunking = kwargs.get("evaluate_chunking", False)
     print_chunks = kwargs.get("print_chunks", False)
 
-    # Get a list of all of the .md files in the docs directory
+    embedding_fn = embedding_functions.DefaultEmbeddingFunction()
+    collection = get_rag_collection()
 
     # Iterate over the list of .md files and process each one
     for md_file_path in md_file_paths:
         # Step 2: Chunk the document
         chunks = get_md_doc_chunks(md_file_path)
+
+        if not chunks:
+            continue
 
         if print_chunks:
             for chunk_index, chunk in enumerate(chunks):
@@ -123,10 +134,22 @@ def process_documents(md_file_paths: list[Path], **kwargs):
             evaluate_file_chunks(chunks)
 
         # Step 3: Compute the embeddings for the document
-        # TODO
+        texts = [chunk.page_content for chunk in chunks]
+        embeddings = embedding_fn(texts)
 
-        # Step 4: Upsert the document into the vector database
-        # TODO
+        # Step 4: Upsert the embeddings into the vector database
+        ids = [
+            hashlib.sha256(f"{md_file_path}::{i}".encode()).hexdigest()
+            for i in range(len(chunks))
+        ]
+        metadatas = [dict(chunk.metadata) for chunk in chunks]
+        collection.upsert(
+            ids=ids,
+            embeddings=embeddings,
+            documents=texts,
+            metadatas=metadatas,
+        )
+        print(f"{GREEN}Upserted {len(chunks)} chunks from {md_file_path}{RESET}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -182,6 +205,7 @@ def main():
         evaluate_chunking=args.evaluate_chunking,
         print_chunks=args.print_chunks,
     )
+
 
 if __name__ == "__main__":
     main()
