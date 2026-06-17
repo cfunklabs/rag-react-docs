@@ -1,7 +1,7 @@
 from pathlib import Path
 from langchain_core.documents import Document
 from dotenv import load_dotenv
-from config import load_colors
+from .config import load_colors
 
 
 load_dotenv()

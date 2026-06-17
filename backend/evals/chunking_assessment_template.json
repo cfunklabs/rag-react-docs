@@ -1,0 +1,93 @@
+{
+  "$schema_note": "Populate one copy of this template per evaluated document. Scores are integers 1-5. See chunking_rubric.md for criterion definitions, weights, and scoring anchors.",
+  "document": {
+    "source": "",
+    "source_length_chars": 0,
+    "chunk_count": 0
+  },
+  "criteria": {
+    "semantic_coherence": {
+      "weight": 2,
+      "score": null,
+      "justification": "",
+      "evidence_chunk_indices": []
+    },
+    "structural_boundary_respect": {
+      "weight": 2,
+      "score": null,
+      "justification": "",
+      "evidence_chunk_indices": []
+    },
+    "code_block_integrity": {
+      "weight": 2,
+      "score": null,
+      "justification": "",
+      "evidence_chunk_indices": []
+    },
+    "sentence_paragraph_integrity": {
+      "weight": 1,
+      "score": null,
+      "justification": "",
+      "evidence_chunk_indices": []
+    },
+    "chunk_size_appropriateness": {
+      "weight": 1,
+      "score": null,
+      "justification": "",
+      "evidence_chunk_indices": []
+    },
+    "overlap_quality": {
+      "weight": 1,
+      "score": null,
+      "justification": "",
+      "evidence_chunk_indices": []
+    },
+    "standalone_interpretability": {
+      "weight": 2,
+      "score": null,
+      "justification": "",
+      "evidence_chunk_indices": []
+    },
+    "content_completeness_no_loss": {
+      "weight": 1,
+      "score": null,
+      "justification": "",
+      "evidence_chunk_indices": []
+    },
+    "metadata_accuracy": {
+      "weight": 1,
+      "score": null,
+      "justification": "",
+      "evidence_chunk_indices": []
+    },
+    "retrieval_utility": {
+      "weight": 2,
+      "score": null,
+      "justification": "",
+      "evidence_chunk_indices": []
+    }
+  },
+  "auto_fail_flags": {
+    "broken_code_fence": {
+      "triggered": false,
+      "details": ""
+    },
+    "mid_sentence_split": {
+      "triggered": false,
+      "details": ""
+    },
+    "content_loss": {
+      "triggered": false,
+      "details": ""
+    },
+    "metadata_missing": {
+      "triggered": false,
+      "details": ""
+    }
+  },
+  "weighted_score": null,
+  "overall_rating": null,
+  "overall_rating_options": ["Excellent", "Good", "Acceptable", "Needs Work"],
+  "summary": "",
+  "recommendations": ""
+}

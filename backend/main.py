@@ -1,8 +1,11 @@
+import argparse
 from pathlib import Path
 import chromadb
 from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from src.utils.config import load_colors, load_pyproject
+from src.utils.load_document_at_path import load_document_at_path
+from src.utils.chunk_document import chunk_document
 
 
 load_dotenv()
@@ -85,24 +88,76 @@ def get_md_doc_file_paths() -> list[Path]:
     return [p for p in DOCS_DIR.rglob("*") if p.is_file() and p.suffix.lower() in md_extensions]
 
 
-def process_documents():
+def process_documents(md_file_paths: list[Path]):
     # Get a list of all of the .md files in the docs directory
 
     # Iterate over the list of .md files and process each one
     for file_path in md_file_paths:
         # Step 1: Load the document at the file path
+        document = load_document_at_path(str(file_path))
+        if document is None:
+            continue
 
         # Step 2: Chunk the document
+        chunks = chunk_document(document)
+        for chunk_index, chunk in enumerate(chunks):
+            print(f"{YELLOW}----------------------------------------{RESET}")
+            print(f"{YELLOW}Chunk metadata:{RESET}")
+            for key, value in chunk.metadata.items():
+                print(f"{YELLOW}  {key}: {RESET}{value}")
+            print(f"{YELLOW}Chunk Index: {RESET}{chunk_index}")
+            print(f"{YELLOW}Chunk START ---{RESET}")
+            print(chunk.page_content)
+            print(f"{YELLOW}--- Chunk END{RESET}")
+            print()
 
         # Step 3: Compute the embeddings for the document
+        # TODO
 
         # Step 4: Upsert the document into the vector database
+        # TODO
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="LangChain RAG demo")
+    parser.add_argument(
+        "--md_file_path",
+        type=Path,
+        default=None,
+        help="Optional path to a single .md file inside the docs directory to process.",
+    )
+    return parser.parse_args()
+
+
+def validate_md_file_path(path: Path) -> Path:
+    resolved = path.resolve()
+    if resolved.suffix.lower() not in {".md", ".markdown"}:
+        print(f"{RED}Error: '{path}' is not a Markdown file (.md or .markdown).{RESET}")
+        raise SystemExit(1)
+    if not resolved.is_relative_to(DOCS_DIR.resolve()):
+        print(f"{RED}Error: '{path}' is not inside the docs directory ({DOCS_DIR}).{RESET}")
+        raise SystemExit(1)
+    if not resolved.is_file():
+        print(f"{RED}Error: '{path}' does not exist.{RESET}")
+        raise SystemExit(1)
+    return resolved
 
 
 def main():
+    args = parse_args()
+
+    if args.md_file_path is not None:
+        md_file_path = validate_md_file_path(args.md_file_path)
+
     if not startup_check():
         print(f"{RED}Startup check failed. Exiting...{RESET}")
         return
+
+    if args.md_file_path is not None:
+        process_documents(md_file_paths=[md_file_path])
+    else:
+        md_file_paths = get_md_doc_file_paths()
+        process_documents(md_file_paths=md_file_paths)
 
 if __name__ == "__main__":
     main()
