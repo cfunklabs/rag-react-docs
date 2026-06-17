@@ -111,7 +111,7 @@ def build_relative_path(section_path: list[str], title: str) -> Path:
     return Path(*parts, sanitize(title) + ".md")
 
 
-def main() -> int:
+def fetch_react_docs() -> int:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     print(f"Fetching index: {INDEX_URL}")
@@ -156,6 +156,15 @@ def main() -> int:
         print(f"{len(failures)} failed:")
         for url, reason in failures:
             print(f"  - {url}: {reason}")
+        return 1
+    return 0
+
+
+def main() -> int:
+    try:
+        fetch_react_docs()
+    except Exception as e:
+        print(f"Error fetching React docs: {e}")
         return 1
     return 0
 

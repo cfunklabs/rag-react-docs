@@ -12,7 +12,7 @@ RED = _colors["RED"]
 RESET = _colors["RESET"]
 
 
-def load_document_at_path(file_path: str):
+def load_document_at_path(file_path: str) -> Document | None:
   try:
     text = Path(file_path).read_text(encoding="utf-8")
     document = Document(page_content=text, metadata={"source": file_path})

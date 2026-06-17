@@ -80,11 +80,29 @@ def startup_check():
     return True
 
 
+def get_md_doc_file_paths() -> list[Path]:
+    md_extensions = {".md", ".markdown"}
+    return [p for p in DOCS_DIR.rglob("*") if p.is_file() and p.suffix.lower() in md_extensions]
+
+
+def process_documents():
+    # Get a list of all of the .md files in the docs directory
+
+    # Iterate over the list of .md files and process each one
+    for file_path in md_file_paths:
+        # Step 1: Load the document at the file path
+
+        # Step 2: Chunk the document
+
+        # Step 3: Compute the embeddings for the document
+
+        # Step 4: Upsert the document into the vector database
+
+
 def main():
     if not startup_check():
         print(f"{RED}Startup check failed. Exiting...{RESET}")
         return
-
 
 if __name__ == "__main__":
     main()
