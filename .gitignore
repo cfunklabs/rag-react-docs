@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 rag_datastore/
 docs/
+backend/evals/results/

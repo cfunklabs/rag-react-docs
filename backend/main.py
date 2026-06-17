@@ -3,9 +3,11 @@ from pathlib import Path
 import chromadb
 from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
+from langchain_core.documents import Document
 from src.utils.config import load_colors, load_pyproject
 from src.utils.load_document_at_path import load_document_at_path
 from src.utils.chunk_document import chunk_document
+from src.utils.evaluate_file_chunks import evaluate_file_chunks
 
 
 load_dotenv()
@@ -21,7 +23,6 @@ DOCS_DIR = Path(__file__).resolve().parent.parent / "docs"
 DOC_EXTENSIONS = {".md", ".markdown", ".txt", ".pdf"}
 DATASTORE_DIR = Path(__file__).resolve().parent / "rag_datastore"
 RAG_COLLECTION_NAME = load_pyproject()["tool"]["rag_db"]["rag_doc_collection_name"]
-
 
 def llm_health_check():
     llm = ChatAnthropic(model="claude-haiku-4-5-20251001", temperature=0.0)
@@ -88,28 +89,38 @@ def get_md_doc_file_paths() -> list[Path]:
     return [p for p in DOCS_DIR.rglob("*") if p.is_file() and p.suffix.lower() in md_extensions]
 
 
-def process_documents(md_file_paths: list[Path]):
+def get_md_doc_chunks(md_file_path: Path) -> list[Document]:
+    document = load_document_at_path(str(md_file_path))
+    if document is None:
+        return []
+    return chunk_document(document)
+
+
+def process_documents(md_file_paths: list[Path], **kwargs):
+    evaluate_chunking = kwargs.get("evaluate_chunking", False)
+    print_chunks = kwargs.get("print_chunks", False)
+
     # Get a list of all of the .md files in the docs directory
 
     # Iterate over the list of .md files and process each one
-    for file_path in md_file_paths:
-        # Step 1: Load the document at the file path
-        document = load_document_at_path(str(file_path))
-        if document is None:
-            continue
-
+    for md_file_path in md_file_paths:
         # Step 2: Chunk the document
-        chunks = chunk_document(document)
-        for chunk_index, chunk in enumerate(chunks):
-            print(f"{YELLOW}----------------------------------------{RESET}")
-            print(f"{YELLOW}Chunk metadata:{RESET}")
-            for key, value in chunk.metadata.items():
-                print(f"{YELLOW}  {key}: {RESET}{value}")
-            print(f"{YELLOW}Chunk Index: {RESET}{chunk_index}")
-            print(f"{YELLOW}Chunk START ---{RESET}")
-            print(chunk.page_content)
-            print(f"{YELLOW}--- Chunk END{RESET}")
-            print()
+        chunks = get_md_doc_chunks(md_file_path)
+
+        if print_chunks:
+            for chunk_index, chunk in enumerate(chunks):
+                print(f"{YELLOW}----------------------------------------{RESET}")
+                print(f"{YELLOW}Chunk metadata:{RESET}")
+                for key, value in chunk.metadata.items():
+                    print(f"{YELLOW}  {key}: {RESET}{value}")
+                print(f"{YELLOW}Chunk Index: {RESET}{chunk_index}")
+                print(f"{YELLOW}Chunk START ---{RESET}")
+                print(chunk.page_content)
+                print(f"{YELLOW}--- Chunk END{RESET}")
+                print()
+        
+        if evaluate_chunking:
+            evaluate_file_chunks(chunks)
 
         # Step 3: Compute the embeddings for the document
         # TODO
@@ -125,6 +136,16 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="Optional path to a single .md file inside the docs directory to process.",
+    )
+    parser.add_argument(
+        "--evaluate_chunking",
+        action="store_true",
+        help="Run the chunking quality evaluation and write assessment reports to backend/evals/results.",
+    )
+    parser.add_argument(
+        "--print_chunks",
+        action="store_true",
+        help="Print each chunk's metadata and content to stdout while processing.",
     )
     return parser.parse_args()
 
@@ -146,18 +167,21 @@ def validate_md_file_path(path: Path) -> Path:
 def main():
     args = parse_args()
 
-    if args.md_file_path is not None:
-        md_file_path = validate_md_file_path(args.md_file_path)
-
     if not startup_check():
         print(f"{RED}Startup check failed. Exiting...{RESET}")
         return
 
+    md_file_paths: list[Path] = []
     if args.md_file_path is not None:
-        process_documents(md_file_paths=[md_file_path])
+        md_file_paths.append(validate_md_file_path(args.md_file_path))
     else:
         md_file_paths = get_md_doc_file_paths()
-        process_documents(md_file_paths=md_file_paths)
+
+    process_documents(
+        md_file_paths=md_file_paths,
+        evaluate_chunking=args.evaluate_chunking,
+        print_chunks=args.print_chunks,
+    )
 
 if __name__ == "__main__":
     main()
