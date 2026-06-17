@@ -285,7 +285,15 @@ def evaluate_file_chunks(chunks: list[Document]) -> None:
     json_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
     md_path.write_text(_render_markdown_report(result), encoding="utf-8")
 
+    rating = result["overall_rating"]
+    if rating in ("Excellent", "Good"):
+        rating_color = GREEN
+    elif rating == "Acceptable":
+        rating_color = YELLOW
+    else:
+        rating_color = RED
+
     print(
-        f"{GREEN}Assessed{RESET} {Path(source).name}: "
-        f"{result['overall_rating']} ({result['weighted_score']}/5) -> {json_path.relative_to(EVALS_DIR.parent)}"
+        f"Assessed {Path(source).name}: "
+        f"{rating_color}{rating} ({result['weighted_score']}/5){RESET} -> {json_path.relative_to(EVALS_DIR.parent)}"
     )
