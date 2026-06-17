@@ -12,17 +12,19 @@ pieces called "chunks". This matters because:
 This module implements a two-pass chunking strategy tailored for Markdown documents:
   Pass 1 — Structure-aware split: divide the document along its heading hierarchy so
             each chunk stays within a logical section.
-  Pass 2 — Size-aware split: further subdivide any sections that are still too large
-            for the embedding model, while keeping some overlap so context isn't lost
-            at chunk boundaries.
+  Pass 2 — Block-aware pack: decompose each section into atomic blocks (prose paragraphs,
+            whole fenced code blocks, and whole MDX wrappers such as <Sandpack>) and
+            greedily pack them up to a soft size target. A fenced code block or MDX
+            wrapper is never severed mid-block; if a single block exceeds the target it
+            becomes its own (slightly oversized) chunk rather than producing an unbalanced
+            code fence. Overlap between consecutive chunks is carried as trailing prose
+            only, so code is never duplicated as a meaningless stub at a boundary.
 """
 
+import re
+
 from langchain_core.documents import Document
-from langchain_text_splitters import (
-    MarkdownHeaderTextSplitter,
-    RecursiveCharacterTextSplitter,
-    Language,
-)
+from langchain_text_splitters import MarkdownHeaderTextSplitter
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -31,22 +33,273 @@ from langchain_text_splitters import (
 
 # Markdown heading levels that act as natural section boundaries.
 # The splitter uses these to divide a document into semantically coherent sections
-# before any character-based splitting occurs.
+# before any block-based packing occurs.
 HEADERS_TO_SPLIT_ON = [
     ("#", "Header 1"),
     ("##", "Header 2"),
     ("###", "Header 3"),
 ]
 
-# Maximum number of characters per chunk. Tune this based on the token limit of
-# your embedding model. Most models support ~512–8192 tokens; 1000 characters is
-# a conservative default that works well across model families.
-CHUNK_SIZE = 1000
+# Soft target for the number of characters per chunk. Tune this based on the token
+# limit of your embedding model. Most models support ~512–8192 tokens; 1500 characters
+# (~375 tokens) is a comfortable default that keeps code examples intact with their
+# surrounding prose. This is a *soft* cap: an atomic block (a fenced code block or an
+# MDX wrapper) is never broken to honor it, so a single large block may overflow.
+CHUNK_SIZE = 1500
 
-# Number of characters shared between consecutive chunks. Overlap prevents a
-# sentence or concept from being split across two chunks in a way that would make
-# either chunk meaningless when retrieved in isolation.
+# Maximum number of characters of trailing prose carried from one chunk into the next.
+# Overlap preserves continuity across a boundary without duplicating code: only prose
+# is carried, and only when the previous chunk ended on a prose paragraph.
 CHUNK_OVERLAP = 150
+
+# Chunks smaller than this are merged into a neighbor so the pipeline never emits a
+# near-empty stub (e.g. a lone heading) that would be a poor retrieval unit.
+MIN_CHUNK_SIZE = 200
+
+# MDX wrapper tags whose entire <Tag>...</Tag> span is treated as a single atomic block,
+# including any code fences nested inside it. React docs wrap runnable examples in
+# <Sandpack>, which contains nested ```js / ```css blocks that must stay together.
+ATOMIC_MDX_TAGS = ("Sandpack", "DiagramGroup")
+
+# Block kinds produced by _split_into_blocks.
+_PROSE = "prose"
+_CODE = "code"
+_MDX = "mdx"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Pass 2 helpers: block decomposition and packing
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _mdx_open_tag(stripped_line: str) -> str | None:
+    """Return the atomic MDX tag name if the line opens one, else None."""
+    for tag in ATOMIC_MDX_TAGS:
+        if stripped_line == f"<{tag}>" or stripped_line.startswith(f"<{tag} "):
+            return tag
+    return None
+
+
+def _split_long_prose(text: str, target: int) -> list[str]:
+    """Split an oversized prose paragraph into sub-paragraphs on sentence boundaries.
+
+    This is the only fallback that ever subdivides content by characters, and it is
+    applied exclusively to prose — code blocks and MDX wrappers are never passed here.
+    """
+    if len(text) <= target:
+        return [text]
+
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    blocks: list[str] = []
+    current = ""
+    for sentence in sentences:
+        if current and len(current) + 1 + len(sentence) > target:
+            blocks.append(current)
+            current = sentence
+        else:
+            current = f"{current} {sentence}".strip() if current else sentence
+    if current:
+        blocks.append(current)
+    return blocks
+
+
+def _split_into_blocks(text: str, max_prose: int = CHUNK_SIZE) -> list[tuple[str, str]]:
+    """Decompose a section into ordered atomic blocks of (kind, content).
+
+    Blocks are one of:
+      - _CODE: a fenced code block, captured whole from its opening ``` to its closing ```.
+      - _MDX:  an atomic MDX wrapper (e.g. <Sandpack>...</Sandpack>), captured whole
+               including any nested code fences.
+      - _PROSE: a run of non-blank, non-code, non-MDX lines (a paragraph). Oversized
+                paragraphs are further split on sentence boundaries via _split_long_prose.
+    """
+    lines = text.split("\n")
+    blocks: list[tuple[str, str]] = []
+    i = 0
+    n = len(lines)
+
+    while i < n:
+        line = lines[i]
+        stripped = line.strip()
+
+        # ── Fenced code block ────────────────────────────────────────────────
+        if stripped.startswith("```"):
+            buffer = [line]
+            i += 1
+            while i < n:
+                buffer.append(lines[i])
+                closed = lines[i].strip().startswith("```")
+                i += 1
+                if closed:
+                    break
+            blocks.append((_CODE, "\n".join(buffer)))
+            continue
+
+        # ── Atomic MDX wrapper (e.g. <Sandpack>) ─────────────────────────────
+        tag = _mdx_open_tag(stripped)
+        if tag is not None:
+            close = f"</{tag}>"
+            buffer = [line]
+            i += 1
+            while i < n:
+                buffer.append(lines[i])
+                closed = lines[i].strip() == close
+                i += 1
+                if closed:
+                    break
+            blocks.append((_MDX, "\n".join(buffer)))
+            continue
+
+        # ── Blank line: paragraph separator ──────────────────────────────────
+        if stripped == "":
+            i += 1
+            continue
+
+        # ── Prose paragraph: until blank line or start of a code/MDX block ────
+        buffer = [line]
+        i += 1
+        while i < n:
+            nxt = lines[i].strip()
+            if nxt == "" or nxt.startswith("```") or _mdx_open_tag(nxt) is not None:
+                break
+            buffer.append(lines[i])
+            i += 1
+        paragraph = "\n".join(buffer)
+        for sub in _split_long_prose(paragraph, max_prose):
+            blocks.append((_PROSE, sub))
+
+    return _glue_lead_ins(blocks)
+
+
+def _glue_lead_ins(blocks: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Attach a colon-terminated prose lead-in to the code/MDX block it introduces.
+
+    Prose like "Have a look at the result:" or "In this example, it is `MyApp`:" exists
+    only to introduce the example that follows it. Merging the two into one atomic block
+    keeps the introduction with its example so a chunk boundary can never strand the
+    lead-in at the end of one chunk while its referent lands in the next.
+    """
+    glued: list[tuple[str, str]] = []
+    i = 0
+    n = len(blocks)
+    while i < n:
+        kind, text = blocks[i]
+        is_lead_in = kind == _PROSE and text.rstrip().endswith(":")
+        introduces_block = i + 1 < n and blocks[i + 1][0] in (_CODE, _MDX)
+        if is_lead_in and introduces_block:
+            next_kind, next_text = blocks[i + 1]
+            glued.append((next_kind, f"{text}\n\n{next_text}"))
+            i += 2
+        else:
+            glued.append((kind, text))
+            i += 1
+    return glued
+
+
+def _trailing_prose_overlap(blocks: list[tuple[str, str]], overlap: int) -> str:
+    """Return trailing prose to seed the next chunk, or "" if the chunk ended on code.
+
+    Only the last block is considered: if it is prose, the last complete sentence(s) up
+    to roughly `overlap` characters are carried; if it is code or an MDX wrapper, no
+    overlap is carried so code is never duplicated as a stub. Carrying whole sentences
+    (rather than a character slice) guarantees the next chunk never begins mid-sentence.
+    """
+    if not blocks or overlap <= 0:
+        return ""
+    kind, text = blocks[-1]
+    if kind != _PROSE:
+        return ""
+    if len(text) <= overlap:
+        return text
+
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    collected: list[str] = []
+    total = 0
+    for sentence in reversed(sentences):
+        addition = len(sentence) + (1 if collected else 0)
+        if collected and total + addition > overlap:
+            break
+        collected.insert(0, sentence)
+        total += addition
+
+    # Always carry at least the final sentence whole, even if it exceeds `overlap`,
+    # so the seed starts on a clean sentence boundary rather than a fragment.
+    if not collected:
+        collected = [sentences[-1]]
+    return " ".join(collected)
+
+
+def _pack_blocks(
+    blocks: list[tuple[str, str]],
+    target: int,
+    overlap: int,
+    heading: str | None = None,
+) -> list[str]:
+    """Greedily pack atomic blocks into chunk strings up to a soft `target` size.
+
+    Blocks are joined with blank lines. A new chunk is started whenever appending the
+    next block would exceed `target` (unless the current chunk is empty, so a single
+    oversized block still becomes one whole chunk). Each new chunk after the first is
+    seeded with the section heading (for standalone interpretability) and any trailing
+    prose overlap from the chunk just flushed.
+    """
+    chunks: list[str] = []
+    current: list[tuple[str, str]] = []
+    current_len = 0
+
+    def flush() -> None:
+        nonlocal current, current_len
+        if current:
+            chunks.append("\n\n".join(text for _, text in current))
+            current = []
+            current_len = 0
+
+    for kind, text in blocks:
+        addition = len(text) + (2 if current else 0)
+        if current and current_len + addition > target:
+            flushed = current
+            flush()
+
+            seed: list[tuple[str, str]] = []
+            if heading and not text.lstrip().startswith("#"):
+                seed.append((_PROSE, heading))
+            overlap_text = _trailing_prose_overlap(flushed, overlap)
+            if overlap_text and overlap_text.strip() != (heading or "").strip():
+                seed.append((_PROSE, overlap_text))
+            for seed_block in seed:
+                current.append(seed_block)
+                current_len += len(seed_block[1]) + (2 if len(current) > 1 else 0)
+
+        current.append((kind, text))
+        current_len += len(text) + (2 if len(current) > 1 else 0)
+
+    flush()
+    return chunks
+
+
+def _merge_tiny_chunks(documents: list[Document], min_size: int) -> list[Document]:
+    """Merge any chunk smaller than `min_size` into an adjacent chunk.
+
+    A tiny chunk is folded into its previous neighbor (inheriting that neighbor's
+    metadata); a tiny leading chunk is folded forward into the following chunk. This
+    removes near-empty stubs such as a lone heading with a single link.
+    """
+    if not documents:
+        return documents
+
+    merged: list[Document] = []
+    for doc in documents:
+        if merged and len(doc.page_content) < min_size:
+            previous = merged[-1]
+            previous.page_content = f"{previous.page_content}\n\n{doc.page_content}"
+        else:
+            merged.append(doc)
+
+    if len(merged) >= 2 and len(merged[0].page_content) < min_size:
+        following = merged[1]
+        following.page_content = f"{merged[0].page_content}\n\n{following.page_content}"
+        merged.pop(0)
+
+    return merged
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -56,17 +309,16 @@ CHUNK_OVERLAP = 150
 def chunk_document(document: Document) -> list[Document]:
     """Split a single Document into smaller chunks suitable for embedding and retrieval.
 
-    The function applies two splitters in sequence:
+    The function applies two passes in sequence:
 
-    1. MarkdownHeaderTextSplitter — respects the document's heading structure so
-       related content stays together. Each resulting section inherits heading text
-       as metadata (e.g. {"Header 2": "Installation"}) which can later be used to
-       filter or display provenance alongside retrieved results.
+    1. MarkdownHeaderTextSplitter — respects the document's heading structure so related
+       content stays together. Each resulting section inherits heading text as metadata
+       (e.g. {"Header 2": "Installation"}) which can later be used to filter or display
+       provenance alongside retrieved results.
 
-    2. RecursiveCharacterTextSplitter — further splits any section that still exceeds
-       CHUNK_SIZE. The MARKDOWN language preset defines a priority-ordered list of
-       split points (headers → blank lines → sentences → characters) so the splitter
-       always tries to break on the most natural boundary first.
+    2. Block-aware packer — decomposes each section into atomic blocks (prose, fenced
+       code, MDX wrappers) and greedily packs them up to CHUNK_SIZE without ever severing
+       a code block or MDX wrapper. Tiny chunks are then merged into a neighbor.
 
     Args:
         document: A LangChain Document object containing the raw page content and any
@@ -86,23 +338,24 @@ def chunk_document(document: Document) -> list[Document]:
     )
     sections = md_splitter.split_text(document.page_content)
 
-    # Propagate the original document's metadata (e.g. source URL) into every
-    # section. The heading metadata added by the splitter is merged on top so
-    # both are available at retrieval time.
+    # ── Pass 2: block-aware pack ───────────────────────────────────────────────
+    # Decompose each section into atomic blocks and pack them up to CHUNK_SIZE,
+    # carrying prose-only overlap and the section heading into continuation chunks.
+    chunks: list[Document] = []
     for section in sections:
-        section.metadata = {**document.metadata, **section.metadata}
+        # Propagate the original document's metadata (e.g. source URL) into every
+        # section. The heading metadata added by the splitter is merged on top so
+        # both are available at retrieval time.
+        metadata = {**document.metadata, **section.metadata}
 
-    # ── Pass 2: size-aware split ───────────────────────────────────────────────
-    # Sections that exceed CHUNK_SIZE are further divided. Using from_language
-    # with Language.MARKDOWN sets a Markdown-aware split priority, meaning the
-    # splitter will try to break on headings, then paragraphs, then sentences,
-    # before falling back to raw character boundaries.
-    recursive_splitter = RecursiveCharacterTextSplitter.from_language(
-        language=Language.MARKDOWN,
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
-    )
-    return recursive_splitter.split_documents(sections)
+        first_line = section.page_content.lstrip().split("\n", 1)[0]
+        heading = first_line if first_line.startswith("#") else None
+
+        blocks = _split_into_blocks(section.page_content, max_prose=CHUNK_SIZE)
+        for chunk_text in _pack_blocks(blocks, CHUNK_SIZE, CHUNK_OVERLAP, heading):
+            chunks.append(Document(page_content=chunk_text, metadata=dict(metadata)))
+
+    return _merge_tiny_chunks(chunks, MIN_CHUNK_SIZE)
 
 
 if __name__ == "__main__":
