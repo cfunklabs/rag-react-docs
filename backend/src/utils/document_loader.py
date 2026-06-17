@@ -1,7 +1,7 @@
 from pathlib import Path
 from langchain_core.documents import Document
 from dotenv import load_dotenv
-from src.utils.config import load_colors
+from config import load_colors
 
 
 load_dotenv()
@@ -9,7 +9,6 @@ load_dotenv()
 
 _colors = load_colors()
 RED = _colors["RED"]
-YELLOW = _colors["YELLOW"]
 RESET = _colors["RESET"]
 
 
@@ -19,7 +18,7 @@ def load_document_at_path(file_path: str):
     document = Document(page_content=text, metadata={"source": file_path})
     return document
   except Exception as e:
-    print(f"Error loading document {file_path}: {e}")
+    print(f"{RED}Error loading document {file_path}: {e}{RESET}")
     return None
 
 if __name__ == "__main__":

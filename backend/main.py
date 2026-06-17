@@ -1,9 +1,8 @@
+from pathlib import Path
+import chromadb
 from dotenv import load_dotenv
-from langchain_core import __version__ as langchain_core_version
-from langgraph.version import __version__ as langgraph_version
-from langchain_anthropic import __version__ as langchain_anthropic_version
 from langchain_anthropic import ChatAnthropic
-from src.utils.config import load_colors
+from src.utils.config import load_colors, load_pyproject
 
 
 load_dotenv()
@@ -12,13 +11,13 @@ load_dotenv()
 _colors = load_colors()
 RED = _colors["RED"]
 GREEN = _colors["GREEN"]
+YELLOW = _colors["YELLOW"]
 RESET = _colors["RESET"]
 
-
-def print_versions():
-    print(f"  - langchain_core_version: {langchain_core_version}")
-    print(f"  - langgraph_version: {langgraph_version}")
-    print(f"  - langchain_anthropic_version: {langchain_anthropic_version}")
+DOCS_DIR = Path(__file__).resolve().parent.parent / "docs"
+DOC_EXTENSIONS = {".md", ".markdown", ".txt", ".pdf"}
+DATASTORE_DIR = Path(__file__).resolve().parent / "rag_datastore"
+RAG_COLLECTION_NAME = load_pyproject()["tool"]["rag_db"]["rag_doc_collection_name"]
 
 
 def llm_health_check():
@@ -27,13 +26,58 @@ def llm_health_check():
     return True if response.content.lower() == "claude api interface is up and running" else False
 
 
+def docs_check():
+    if not DOCS_DIR.is_dir():
+        print(f" {RED}FAILED{RESET}")
+        print(f"{RED}Docs directory not found at {DOCS_DIR}{RESET}")
+        return False
+    file_count = sum(
+        1 for p in DOCS_DIR.rglob("*") if p.is_file() and p.suffix.lower() in DOC_EXTENSIONS
+    )
+    if file_count == 0:
+        print(f" {RED}FAILED{RESET}")
+        print(f"{RED}No document files found in {DOCS_DIR}{RESET}")
+        return False
+    print(f" {GREEN}PASSED{RESET} ({file_count} document{'s' if file_count != 1 else ''} found)")
+    return True
+
+
+def datastore_check():
+    if not DATASTORE_DIR.is_dir():
+        print(f" {RED}FAILED{RESET}")
+        print(f"{RED}RAG datastore not found at {DATASTORE_DIR}. Run init_db first.{RESET}")
+        return False
+    try:
+        client = chromadb.PersistentClient(path=str(DATASTORE_DIR))
+        collection = client.get_collection(name=RAG_COLLECTION_NAME)
+        doc_count = collection.count()
+    except Exception as e:
+        print(f" {RED}FAILED{RESET}")
+        print(f"{RED}Collection '{RAG_COLLECTION_NAME}' not initialized: {e}. Run init_db first.{RESET}")
+        return False
+    doc_label = f"{doc_count} document{'s' if doc_count != 1 else ''}"
+    if doc_count == 0:
+        doc_label = f"{YELLOW}{doc_label}{RESET}"
+    print(f" {GREEN}PASSED{RESET} (collection '{RAG_COLLECTION_NAME}', {doc_label})")
+    return True
+
+
 def startup_check():
-    print("Versions:")
-    print_versions()
-    print("\nChecking LLM service health...", end="")
+    print("Checking docs directory...", end="")
+    if not docs_check():
+        return False
+
+    print("Checking RAG datastore...", end="")
+    if not datastore_check():
+        return False
+
+    print("Checking LLM service health...", end="")
     is_llm_healthy = llm_health_check()
     print(f" {GREEN if is_llm_healthy else RED}{'PASSED' if is_llm_healthy else 'FAILED'}{RESET}")
-    return is_llm_healthy
+    if not is_llm_healthy:
+        return False
+
+    return True
 
 
 def main():
