@@ -9,3 +9,7 @@ def load_pyproject(path: str = "pyproject.toml") -> dict:
 
 def load_colors() -> dict:
     return load_pyproject()["tool"]["console"]["colors"]
+
+
+def load_rag_query_config() -> dict:
+    return load_pyproject()["tool"]["rag_query"]

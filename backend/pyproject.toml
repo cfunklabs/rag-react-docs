@@ -17,6 +17,10 @@ dependencies = [
 [tool.rag_db]
 rag_doc_collection_name = "rag_doc_collection"
 
+[tool.rag_query]
+top_k = 5
+generation_model = "claude-sonnet-4-6"
+
 [tool.console.colors]
 GREEN = "\u001B[92m"
 RED = "\u001B[91m"

@@ -88,3 +88,37 @@ Checking LLM service health... PASSED
 ```
 
 If the health check fails, confirm that `ANTHROPIC_API_KEY` is set correctly in your `.env` file.
+
+### Ingesting documents
+
+Chunk every Markdown file under `docs/`, embed the chunks, and upsert them into the vector store:
+
+```bash
+uv run main.py
+```
+
+To process a single file (useful while iterating on chunking), pass `--md_file_path`. Add
+`--evaluate_chunking` to write LLM-as-judge quality reports to `evals/results`, or
+`--print_chunks` to dump each chunk to stdout.
+
+### Querying
+
+Ask a question against the ingested docs. The query pipeline is a LangGraph graph
+(`retrieve` -> `generate`) that embeds your question with the same model used at ingestion,
+retrieves the most similar chunks from ChromaDB, and has Claude answer using only that
+context. The answer streams token-by-token and is followed by the cited sources:
+
+```bash
+uv run query.py "How does memo work?"
+```
+
+Options:
+
+- `--k N` — number of chunks to retrieve (default `top_k` in [pyproject.toml](pyproject.toml)).
+- `--no-stream` — wait for the full answer instead of streaming tokens.
+- `--show-scores` — show the retrieval distance for each cited source.
+- `-v`, `--verbose` — show diagnostic output (the preflight datastore and LLM health checks). Hidden by default.
+
+Retrieval and generation settings live under `[tool.rag_query]` in [pyproject.toml](pyproject.toml)
+(`top_k` and `generation_model`). Run `uv run main.py` first — querying requires a populated
+collection.

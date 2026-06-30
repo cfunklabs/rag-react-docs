@@ -10,6 +10,7 @@ from src.utils.config import load_colors, load_pyproject
 from src.utils.load_document_at_path import load_document_at_path
 from src.utils.chunk_document import chunk_document
 from src.utils.evaluate_file_chunks import evaluate_file_chunks
+from src.utils.get_rag_collection import get_rag_collection
 
 
 load_dotenv()
@@ -96,11 +97,6 @@ def get_md_doc_chunks(md_file_path: Path) -> list[Document]:
     if document is None:
         return []
     return chunk_document(document)
-
-
-def get_rag_collection():
-    client = chromadb.PersistentClient(path=str(DATASTORE_DIR))
-    return client.get_collection(name=RAG_COLLECTION_NAME)
 
 
 def process_documents(md_file_paths: list[Path], **kwargs):
