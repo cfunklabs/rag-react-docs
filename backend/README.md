@@ -122,3 +122,39 @@ Options:
 Retrieval and generation settings live under `[tool.rag_query]` in [pyproject.toml](pyproject.toml)
 (`top_k` and `generation_model`). Run `uv run main.py` first — querying requires a populated
 collection.
+
+### MCP server
+
+In addition to the CLI, the retrieval pipeline is exposed as an [MCP](https://modelcontextprotocol.io/)
+server over stdio, so MCP clients (Cursor, Claude Desktop, etc.) can pull grounding context
+directly. It exposes a single **retrieval-only** tool:
+
+- `search_docs(question, k?)` — embeds the question with the same model used at ingestion,
+  retrieves the most similar chunks from ChromaDB, and returns each chunk's `source` label,
+  `content`, and retrieval `distance`. The client LLM generates the answer from those chunks,
+  so no Anthropic key is needed to run the server.
+
+Run it from the `backend` directory (so `pyproject.toml` resolves):
+
+```bash
+uv run mcp_server.py
+```
+
+To register it with an MCP client, point the client at the same command. Use an absolute
+`cwd` so the server runs from `backend/`:
+
+```json
+{
+  "mcpServers": {
+    "rag-react-docs": {
+      "command": "uv",
+      "args": ["run", "mcp_server.py"],
+      "cwd": "/absolute/path/to/langchain-rag-demo/backend"
+    }
+  }
+}
+```
+
+Run `uv run main.py` first — `search_docs` needs a populated collection (it returns a hint
+to ingest if the index is empty). For interactive testing, launch the MCP Inspector with
+`uv run mcp dev mcp_server.py`.

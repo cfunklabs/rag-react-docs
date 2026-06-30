@@ -10,7 +10,6 @@ single LCEL chain) makes the data flow inspectable and leaves room to add nodes 
 query rewriting or re-ranking) without restructuring the call sites.
 """
 
-from pathlib import Path
 from typing import TypedDict
 
 from langchain_anthropic import ChatAnthropic
@@ -19,10 +18,9 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import START, END, StateGraph
 
 from .config import load_rag_query_config
+from .format_source_label import format_source_label
 from .retrieve_chunks import retrieve_chunks
 
-
-_DOCS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "docs"
 
 _query_config = load_rag_query_config()
 GENERATION_MODEL = _query_config["generation_model"]
@@ -46,29 +44,6 @@ class RAGState(TypedDict):
     k: int
     context: list[Document]
     answer: str
-
-
-def format_source_label(metadata: dict) -> str:
-    """Build a human-readable provenance label from a chunk's metadata.
-
-    Combines the source file (shortened to a path relative to the docs directory when
-    possible) with the stored heading hierarchy, e.g.
-    "API Reference/React/APIs/memo.md > Reference > memo(Component, arePropsEqual?)".
-    """
-    source = metadata.get("source", "unknown source")
-    try:
-        source = str(Path(source).resolve().relative_to(_DOCS_DIR.resolve()))
-    except (ValueError, OSError):
-        source = Path(source).name
-
-    headings = [
-        metadata[field]
-        for field in ("Header 1", "Header 2", "Header 3")
-        if metadata.get(field)
-    ]
-    if headings:
-        return f"{source} > {' > '.join(headings)}"
-    return source
 
 
 def _format_context(chunks: list[Document]) -> str:
