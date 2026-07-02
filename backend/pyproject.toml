@@ -1,6 +1,6 @@
 [project]
 name = "cfunklabs-rag-react-docs"
-version = "0.1.1"
+version = "0.1.2"
 description = "Retrieval-only MCP server over the indexed React documentation, with a prebuilt index downloaded on first run."
 readme = "README.md"
 requires-python = ">=3.14"
