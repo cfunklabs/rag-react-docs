@@ -181,35 +181,72 @@ press Ctrl+C to stop.
 Run `uv run main.py` first — the dev server needs a populated collection. For interactive
 testing, launch the MCP Inspector with `uv run mcp dev mcp_server.py`.
 
-### Publishing to PyPI
+### Releasing
 
 The published package (`cfunklabs-rag-react-docs`) contains only the retrieval + MCP server
 (the import package `rag_react_docs` under `src/`). Ingestion/query tooling and `src/utils/*`
 are dev-only and excluded from the wheel.
 
-Two artifacts get published: the Python package (to PyPI) and the prebuilt index (to a GitHub
-Release). They version independently — the index version is pinned as `INDEX_VERSION` in
-[src/rag_react_docs/config.py](src/rag_react_docs/config.py).
+A release involves two independently-versioned artifacts:
 
-1. Build and upload the index archive (after `uv run main.py` has populated `rag_datastore`):
+- The **PyPI package**, published **automatically** by CI when you push a `v*` git tag. The
+  [.github/workflows/publish.yml](../.github/workflows/publish.yml) workflow builds the wheel/sdist
+  and uploads them to PyPI using [trusted publishing](https://docs.pypi.org/trusted-publishers/)
+  (OIDC) — no API tokens or secrets are involved.
+- The **prebuilt index**, uploaded **manually** to a GitHub Release, and only when the corpus
+  changes. Its version is `INDEX_VERSION` in [src/rag_react_docs/config.py](src/rag_react_docs/config.py),
+  independent of the package version.
+
+The `v*` tag drives PyPI and the `index-*` tag drives the index download; they never trigger each
+other (the workflow filters `v*`).
+
+#### Release checklist
+
+**Step 1 - Increment the package version.** Bump the version in BOTH
+[pyproject.toml](pyproject.toml) (`version`) and
+[src/rag_react_docs/__init__.py](src/rag_react_docs/__init__.py) (`__version__`), keeping them in
+sync. PyPI rejects re-uploads of an existing version, so this must change every release.
+
+**Step 2 - Build and upload the index (only if the docs, chunking, or embeddings changed).** Most
+code-only releases skip this step. If the index content changed, bump `REACT_VERSION` and/or
+`INDEX_REVISION` in [src/rag_react_docs/config.py](src/rag_react_docs/config.py) first, then:
 
 ```bash
+uv run main.py                     # repopulate rag_datastore (needs docs fetched + ANTHROPIC_API_KEY)
 uv run scripts/build_index_archive.py
 gh release create index-19-2-v1 dist/rag-index-19-2-v1.tar.gz dist/rag-index-19-2-v1.tar.gz.sha256
 ```
 
-2. Build and publish the package (test on TestPyPI first):
-
-```bash
-uv build                                   # -> dist/ wheel + sdist (only rag_react_docs)
-uv publish --publish-url https://test.pypi.org/legacy/   # TestPyPI dry run
-uv publish                                 # PyPI
-```
+Upload the index **before** publishing the package release, so the new package's `INDEX_URL`
+resolves for end users on first run.
 
 The index version follows the standard `index-<react-version>-v<incremental>` (e.g.
-`index-19-2-v1`), composed in [src/rag_react_docs/config.py](src/rag_react_docs/config.py) from
-`REACT_VERSION` and `INDEX_REVISION`. Bump `REACT_VERSION` when re-fetching the docs for a new
-React release, and bump `INDEX_REVISION` for re-chunk or embedding-model changes within the same
-React version. Either bump changes the release tag/asset name and cache path, so clients pull a
-fresh, compatible index instead of reusing a stale cache — re-release the archive under the new
-`index-<react-version>-v<incremental>` tag.
+`index-19-2-v1`), composed from `REACT_VERSION` and `INDEX_REVISION`. Bump `REACT_VERSION` when
+re-fetching the docs for a new React release, and bump `INDEX_REVISION` for re-chunk or
+embedding-model changes within the same React version. Either bump changes the release tag/asset
+name and the client cache path, so clients pull a fresh, compatible index instead of reusing a
+stale cache.
+
+**Step 3 - (Optional) Local build sanity check.** This verifies the wheel/sdist build; it is not
+the publish mechanism (CI builds too). Artifacts land in the gitignored `dist/`.
+
+```bash
+uv build
+```
+
+**Step 4 - Publish by tagging.** Commit the version bump, then tag and push. The `v*` tag triggers
+CI, which builds and publishes to PyPI automatically:
+
+```bash
+git commit -am "Release v0.1.3"
+git tag -a v0.1.3 -m "Release v0.1.3"
+git push origin main --tags
+```
+
+After the workflow finishes, verify the new version at
+[pypi.org/project/cfunklabs-rag-react-docs](https://pypi.org/project/cfunklabs-rag-react-docs/), and
+(if you re-released the index) that the index asset URL returns `200`.
+
+> Manual publishing (`uv publish`) is not the standard path: trusted publishing is configured for
+> CI only, so a local upload would require a separate API token and bypass the pinned `pypi`
+> environment. Prefer the tag-driven flow above.
