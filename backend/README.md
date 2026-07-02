@@ -129,12 +129,19 @@ collection.
 
 In addition to the CLI, the retrieval pipeline is exposed as an [MCP](https://modelcontextprotocol.io/)
 server over stdio, so MCP clients (Cursor, Claude Desktop, etc.) can pull grounding context
-directly. It exposes a single **retrieval-only** tool:
+directly. The server ships prescriptive metadata — a server-level instructions block plus a
+richly documented tool — so a consuming LLM knows when to reach for it (any React 19.2 API,
+hook, component, or pattern question) instead of relying on its own possibly-stale knowledge.
+It exposes a single **retrieval-only** tool:
 
-- `search_docs(question, k?)` — embeds the question with the same model used at ingestion,
+- `search_react_docs(question, k?)` — embeds the question with the same model used at ingestion,
   retrieves the most similar chunks from ChromaDB, and returns each chunk's `source` label,
   `content`, and retrieval `distance`. The client LLM generates the answer from those chunks,
   so no Anthropic key is needed to run the server.
+  - `question` should be a full natural-language question, not bare keywords.
+  - `k` defaults to `RAG_TOP_K` (5); use ~3 for a specific API lookup and ~8-10 for broad topics.
+  - `distance` is squared L2 over normalized embeddings, so **lower is more similar**. For this
+    corpus, `< ~1.0` is relevant and `> ~1.5` usually means off-topic / not covered.
 
 #### For end users (published package)
 

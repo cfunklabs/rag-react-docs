@@ -27,6 +27,10 @@ REACT_VERSION = "19-2"
 INDEX_REVISION = "v1"
 INDEX_VERSION = f"{REACT_VERSION}-{INDEX_REVISION}"
 
+# Human-readable React version (e.g. "19.2") for user/LLM-facing strings like the tool
+# description and server instructions. Derived from REACT_VERSION so there's one source of truth.
+REACT_VERSION_LABEL = REACT_VERSION.replace("-", ".")
+
 # The prebuilt index is published as a GitHub Release asset. A sibling `<archive>.sha256` file
 # is fetched alongside it to verify the download before extraction.
 _DEFAULT_INDEX_URL = (
