@@ -2,18 +2,21 @@
 
 The published package ships no vectors: the ~34 MB index lives as a GitHub Release asset and is
 fetched + cached the first time the server needs it. Subsequent runs read straight from the
-cache and work offline. Only the standard library is used for the download so the wheel stays
-dependency-light (no httpx/requests).
+cache and work offline. The download uses urllib with an explicit certifi CA bundle so TLS
+verification works even on interpreters that lack a configured system cert store (e.g. the
+python.org macOS framework build), rather than relying on the ambient default SSL context.
 """
 
 import hashlib
 import os
 import shutil
+import ssl
 import tarfile
 import tempfile
 import urllib.request
 from pathlib import Path
 
+import certifi
 import chromadb
 
 from .config import COLLECTION_NAME, INDEX_URL, datastore_dir
@@ -24,9 +27,14 @@ from .config import COLLECTION_NAME, INDEX_URL, datastore_dir
 # looks valid on the next run.
 _MARKER = "chroma.sqlite3"
 
+# Verify TLS against certifi's CA bundle instead of the interpreter default. Some Python builds
+# (notably python.org macOS framework installs) ship without usable root certificates, which
+# makes the default context fail with CERTIFICATE_VERIFY_FAILED on any HTTPS download.
+_SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+
 
 def _download(url: str, dest: Path) -> None:
-    with urllib.request.urlopen(url) as response, open(dest, "wb") as out:
+    with urllib.request.urlopen(url, context=_SSL_CONTEXT) as response, open(dest, "wb") as out:
         shutil.copyfileobj(response, out)
 
 
@@ -46,7 +54,7 @@ def _verify_checksum(archive: Path, url: str) -> None:
     tolerated (some releases may not publish one) but a present-and-mismatched one is fatal.
     """
     try:
-        with urllib.request.urlopen(url + ".sha256") as response:
+        with urllib.request.urlopen(url + ".sha256", context=_SSL_CONTEXT) as response:
             expected = response.read().decode().strip().split()[0]
     except Exception:
         return

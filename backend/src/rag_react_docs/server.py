@@ -11,7 +11,7 @@ import sys
 
 from mcp.server.fastmcp import FastMCP
 
-from .config import DEFAULT_TOP_K
+from .config import DEFAULT_TOP_K, INDEX_URL
 from .datastore import get_rag_collection
 from .retrieval import retrieve_chunks
 
@@ -19,12 +19,23 @@ from .retrieval import retrieve_chunks
 mcp = FastMCP("rag-react-docs")
 
 
-def _collection_is_empty() -> bool:
+def _index_error() -> str | None:
+    """Return a human-readable reason the index is unavailable, or None if it's ready.
+
+    Distinguishes a real load/download failure (surfacing the underlying exception and the
+    URL it tried) from a genuinely empty collection, so callers report the actual cause rather
+    than a catch-all "index is empty" message.
+    """
     try:
-        return get_rag_collection().count() == 0
-    except Exception:
-        # Treat a missing/uninitialized/failed-download collection the same as an empty one.
-        return True
+        count = get_rag_collection().count()
+    except Exception as exc:
+        return (
+            f"Could not load the documentation index (downloaded from {INDEX_URL}): "
+            f"{type(exc).__name__}: {exc}"
+        )
+    if count == 0:
+        return "The documentation index loaded but contains no documents."
+    return None
 
 
 @mcp.tool()
@@ -40,17 +51,10 @@ def search_docs(question: str, k: int = DEFAULT_TOP_K) -> list[dict]:
         - content:  the raw chunk text to ground an answer on
         - distance: the retrieval distance (lower is more similar)
     """
-    if _collection_is_empty():
-        return [
-            {
-                "source": "rag-react-docs",
-                "content": (
-                    "The documentation index is empty or could not be loaded. "
-                    "Check network access on first run so the index can be downloaded."
-                ),
-                "distance": None,
-            }
-        ]
+    error = _index_error()
+    if error:
+        print(f"[rag-react-docs] {error}", file=sys.stderr)
+        return [{"source": "rag-react-docs", "content": error, "distance": None}]
 
     return retrieve_chunks(question, k)
 
@@ -61,16 +65,11 @@ def main() -> None:
     # JSON-RPC protocol, so anything printed there would corrupt the stream.
     print(f"[rag-react-docs] MCP server starting on stdio (top_k={DEFAULT_TOP_K}).", file=sys.stderr)
     print("[rag-react-docs] Ensuring documentation index is available...", file=sys.stderr)
-    try:
-        if _collection_is_empty():
-            print(
-                "[rag-react-docs] Warning: index empty or unavailable -- check network access.",
-                file=sys.stderr,
-            )
-        else:
-            print("[rag-react-docs] Index ready.", file=sys.stderr)
-    except Exception as exc:  # pragma: no cover - defensive; _collection_is_empty swallows most
-        print(f"[rag-react-docs] Warning: could not verify index: {exc}", file=sys.stderr)
+    error = _index_error()
+    if error:
+        print(f"[rag-react-docs] Warning: {error}", file=sys.stderr)
+    else:
+        print("[rag-react-docs] Index ready.", file=sys.stderr)
 
     print("[rag-react-docs] Ready. Press Ctrl+C to stop.", file=sys.stderr)
     try:

@@ -248,9 +248,10 @@ wheels = [
 
 [[package]]
 name = "cfunklabs-rag-react-docs"
-version = "0.1.0"
+version = "0.1.3"
 source = { editable = "." }
 dependencies = [
+    { name = "certifi" },
     { name = "chromadb" },
     { name = "mcp" },
     { name = "platformdirs" },
@@ -269,6 +270,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "certifi", specifier = ">=2024.0.0" },
     { name = "chromadb", specifier = ">=1.5.9" },
     { name = "mcp", specifier = ">=1.28.1" },
     { name = "platformdirs", specifier = ">=4.0.0" },
