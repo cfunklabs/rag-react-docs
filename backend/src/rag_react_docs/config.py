@@ -18,10 +18,14 @@ COLLECTION_NAME = os.environ.get("RAG_COLLECTION_NAME", "rag_doc_collection")
 
 DEFAULT_TOP_K = int(os.environ.get("RAG_TOP_K", "5"))
 
-# Bump when republishing an incompatible index (e.g. re-chunked corpus or new embedding model).
-# The version is part of both the cache path and the release asset name so a bump forces a
-# fresh download rather than reusing a stale cached index.
-INDEX_VERSION = "v1"
+# Index version standard: index-<react-version>-v<incremental> (e.g. index-19-2-v1).
+# REACT_VERSION is the React docs version with dots as dashes; bump it when the corpus is
+# re-fetched for a new React release. INDEX_REVISION bumps for re-chunk/embedding changes
+# within the same React version. INDEX_VERSION is part of both the cache path and the release
+# asset name, so any bump forces a fresh download rather than reusing a stale cached index.
+REACT_VERSION = "19-2"
+INDEX_REVISION = "v1"
+INDEX_VERSION = f"{REACT_VERSION}-{INDEX_REVISION}"
 
 # The prebuilt index is published as a GitHub Release asset. A sibling `<archive>.sha256` file
 # is fetched alongside it to verify the download before extraction.

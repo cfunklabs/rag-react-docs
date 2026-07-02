@@ -7,10 +7,10 @@ and verifies exactly these files (see src/rag_react_docs/datastore.py).
 
 Usage:
     uv run scripts/build_index_archive.py            # uses INDEX_VERSION from the package
-    uv run scripts/build_index_archive.py --version v2
+    uv run scripts/build_index_archive.py --version 19-2-v2
 
 Then upload both files to a release tagged `index-<version>`, e.g.:
-    gh release create index-v1 dist/rag-index-v1.tar.gz dist/rag-index-v1.tar.gz.sha256
+    gh release create index-19-2-v1 dist/rag-index-19-2-v1.tar.gz dist/rag-index-19-2-v1.tar.gz.sha256
 """
 
 import argparse

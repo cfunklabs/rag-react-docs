@@ -188,7 +188,7 @@ Release). They version independently — the index version is pinned as `INDEX_V
 
 ```bash
 uv run scripts/build_index_archive.py
-gh release create index-v1 dist/rag-index-v1.tar.gz dist/rag-index-v1.tar.gz.sha256
+gh release create index-19-2-v1 dist/rag-index-19-2-v1.tar.gz dist/rag-index-19-2-v1.tar.gz.sha256
 ```
 
 2. Build and publish the package (test on TestPyPI first):
@@ -199,6 +199,10 @@ uv publish --publish-url https://test.pypi.org/legacy/   # TestPyPI dry run
 uv publish                                 # PyPI
 ```
 
-Bump `INDEX_VERSION` (and re-release the archive under the new `index-<version>` tag) whenever
-the corpus is re-chunked or the embedding model changes, so clients pull a fresh, compatible
-index instead of reusing a stale cache.
+The index version follows the standard `index-<react-version>-v<incremental>` (e.g.
+`index-19-2-v1`), composed in [src/rag_react_docs/config.py](src/rag_react_docs/config.py) from
+`REACT_VERSION` and `INDEX_REVISION`. Bump `REACT_VERSION` when re-fetching the docs for a new
+React release, and bump `INDEX_REVISION` for re-chunk or embedding-model changes within the same
+React version. Either bump changes the release tag/asset name and cache path, so clients pull a
+fresh, compatible index instead of reusing a stale cache — re-release the archive under the new
+`index-<react-version>-v<incremental>` tag.
