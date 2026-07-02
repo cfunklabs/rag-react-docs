@@ -23,8 +23,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/coreyafunk/langchain-rag-demo"
-Repository = "https://github.com/coreyafunk/langchain-rag-demo"
+Homepage = "https://github.com/cfunklabs/rag-react-docs"
+Repository = "https://github.com/cfunklabs/rag-react-docs"
 
 [project.scripts]
 cfunklabs-rag-react-docs = "rag_react_docs.server:main"

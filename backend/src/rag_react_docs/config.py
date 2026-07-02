@@ -26,7 +26,7 @@ INDEX_VERSION = "v1"
 # The prebuilt index is published as a GitHub Release asset. A sibling `<archive>.sha256` file
 # is fetched alongside it to verify the download before extraction.
 _DEFAULT_INDEX_URL = (
-    "https://github.com/coreyafunk/langchain-rag-demo/releases/download/"
+    "https://github.com/cfunklabs/rag-react-docs/releases/download/"
     f"index-{INDEX_VERSION}/rag-index-{INDEX_VERSION}.tar.gz"
 )
 INDEX_URL = os.environ.get("RAG_INDEX_URL", _DEFAULT_INDEX_URL)
