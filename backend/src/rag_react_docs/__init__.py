@@ -5,4 +5,4 @@ ChromaDB index is downloaded from a GitHub Release on first run (see `datastore.
 users never run the ingestion pipeline themselves.
 """
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
