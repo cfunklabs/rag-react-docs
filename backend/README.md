@@ -1,6 +1,8 @@
-# rag-backend
+# cfunklabs-rag-react-docs
 
 Backend for the RAG demo, built with LangChain, LangGraph, Anthropic Claude, and ChromaDB.
+It also ships a retrieval-only MCP server, published to PyPI as `cfunklabs-rag-react-docs`,
+that serves grounding context from the indexed React documentation (see [MCP server](#mcp-server)).
 
 ## Prerequisites
 
@@ -134,27 +136,69 @@ directly. It exposes a single **retrieval-only** tool:
   `content`, and retrieval `distance`. The client LLM generates the answer from those chunks,
   so no Anthropic key is needed to run the server.
 
-Run it from the `backend` directory (so `pyproject.toml` resolves):
+#### For end users (published package)
 
-```bash
-uv run mcp_server.py
-```
-
-To register it with an MCP client, point the client at the same command. Use an absolute
-`cwd` so the server runs from `backend/`:
+The server is published to PyPI as **`cfunklabs-rag-react-docs`**. End users don't clone the
+repo or run the ingestion pipeline — the prebuilt index (~34 MB) is downloaded from a GitHub
+Release and cached on first run. Just register it with your MCP client:
 
 ```json
 {
   "mcpServers": {
     "rag-react-docs": {
-      "command": "uv",
-      "args": ["run", "mcp_server.py"],
-      "cwd": "/absolute/path/to/langchain-rag-demo/backend"
+      "command": "uvx",
+      "args": ["cfunklabs-rag-react-docs"]
     }
   }
 }
 ```
 
-Run `uv run main.py` first — `search_docs` needs a populated collection (it returns a hint
-to ingest if the index is empty). For interactive testing, launch the MCP Inspector with
-`uv run mcp dev mcp_server.py`.
+The first launch needs network access to fetch the index; subsequent runs read from the local
+cache (`platformdirs` cache dir) and work offline. Optional environment overrides: `RAG_TOP_K`,
+`RAG_COLLECTION_NAME`, `RAG_INDEX_URL`, and `RAG_DATASTORE_DIR`.
+
+#### Local development
+
+Run the dev server from the `backend` directory (so `pyproject.toml` resolves) against the
+locally-built `rag_datastore`:
+
+```bash
+uv run mcp_server.py
+```
+
+Run standalone this way, the server prints a short startup banner to stderr and then blocks
+silently by design — the stdio transport reserves stdout for the JSON-RPC protocol, so it
+waits for a client to connect rather than logging. Running it directly is mainly a smoke test;
+press Ctrl+C to stop.
+
+Run `uv run main.py` first — the dev server needs a populated collection. For interactive
+testing, launch the MCP Inspector with `uv run mcp dev mcp_server.py`.
+
+### Publishing to PyPI
+
+The published package (`cfunklabs-rag-react-docs`) contains only the retrieval + MCP server
+(the import package `rag_react_docs` under `src/`). Ingestion/query tooling and `src/utils/*`
+are dev-only and excluded from the wheel.
+
+Two artifacts get published: the Python package (to PyPI) and the prebuilt index (to a GitHub
+Release). They version independently — the index version is pinned as `INDEX_VERSION` in
+[src/rag_react_docs/config.py](src/rag_react_docs/config.py).
+
+1. Build and upload the index archive (after `uv run main.py` has populated `rag_datastore`):
+
+```bash
+uv run scripts/build_index_archive.py
+gh release create index-v1 dist/rag-index-v1.tar.gz dist/rag-index-v1.tar.gz.sha256
+```
+
+2. Build and publish the package (test on TestPyPI first):
+
+```bash
+uv build                                   # -> dist/ wheel + sdist (only rag_react_docs)
+uv publish --publish-url https://test.pypi.org/legacy/   # TestPyPI dry run
+uv publish                                 # PyPI
+```
+
+Bump `INDEX_VERSION` (and re-release the archive under the new `index-<version>` tag) whenever
+the corpus is re-chunked or the embedding model changes, so clients pull a fresh, compatible
+index instead of reusing a stale cache.

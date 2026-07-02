@@ -12,6 +12,8 @@ Run it from the `backend/` directory so `load_rag_query_config()` resolves `pypr
     uv run mcp_server.py
 """
 
+import sys
+
 from mcp.server.fastmcp import FastMCP
 
 from src.utils.config import load_rag_query_config
@@ -72,4 +74,13 @@ def search_docs(question: str, k: int = DEFAULT_TOP_K) -> list[dict]:
 
 
 if __name__ == "__main__":
-    mcp.run()
+    # Human-facing messages must go to stderr: the stdio transport reserves stdout for the
+    # JSON-RPC protocol, so anything printed there would corrupt the stream.
+    print(f"[rag-react-docs] MCP server starting on stdio (top_k={DEFAULT_TOP_K}).", file=sys.stderr)
+    if _collection_is_empty():
+        print("[rag-react-docs] Warning: index empty -- run 'uv run main.py' first.", file=sys.stderr)
+    print("[rag-react-docs] Ready. Press Ctrl+C to stop.", file=sys.stderr)
+    try:
+        mcp.run()
+    except KeyboardInterrupt:
+        print("\n[rag-react-docs] Shutting down.", file=sys.stderr)

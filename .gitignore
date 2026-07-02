@@ -6,3 +6,4 @@ __pycache__/
 rag_datastore/
 docs/
 backend/evals/results/
+dist/
